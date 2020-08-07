@@ -1,0 +1,86 @@
+Graffiti REST protcol.
+
+=============================================================
+Access Control
+=============================================================
+
+Most REST calls require authentication. The ones that don't are marked.
+
+Posting to /api/player/login or /api/player/new creates a new user session.
+These return an access token which must be sent on all subsequent requests:
+  Authorization: Bearer ACCESSTOKEN
+  
+Passwords are optional.
+If you create a player without one, it is only good for the duration of the session.
+
+Sessions permanently log out after some interval of inactivity.
+
+*** For now at least, the server has no persistence, so a server restart wipes the user list. ***
+
+=============================================================
+Endpoints
+=============================================================
+
+-------------------------------------------------------------
+GET /api/time
+=> Current time, ISO 8601
+Unauthenticated
+
+POST /api/selftest
+Unauthenticated
+Perform self-test and dump info to the server's log -- no results sent to client.
+
+-------------------------------------------------------------
+POST /api/player/login?id
+Unauthenticated
+<= password
+=> {
+  accessToken: string
+  name: string
+}
+
+POST /api/player/new?name[&id]
+Unauthenticated
+<= password
+=> {
+  accessToken: string
+  name: string
+}
+
+DELETE /api/player
+
+POST /api/player/logout
+
+-------------------------------------------------------------
+POST /api/room/new
+=> Room
+
+GET /api/room?id
+=> Room
+
+DELETE /api/room?id
+
+PUT /api/room?id
+<= Room
+=> Room
+
+-------------------------------------------------------------
+POST /api/join?roomId&playerId
+POST /api/leave?roomId&playerId
+
+=============================================================
+Types
+=============================================================
+
+Room {
+  id: string
+  players: Player[]
+  state: "gather" | "play" | "conclude" | "cancel"
+  startTime: string(8601)
+  endTime: string(8601)
+}
+
+Player {
+  id: string // canonical secretish user id
+  name: string // for display
+}
