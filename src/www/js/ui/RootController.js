@@ -3,19 +3,22 @@
  
 import { Dom } from "/js/service/Dom.js";
 import { PlayCanvas } from "/js/ui/PlayCanvas.js";
+import { Toolbar } from "/js/ui/Toolbar.js";
 import { BackgroundImageService } from "/js/service/BackgroundImageService.js";
 
 export class RootController {
 
   static getDependencies() {
-    return [HTMLElement, Dom, BackgroundImageService];
+    return [HTMLElement, Dom, BackgroundImageService, Window];
   }
-  constructor(element, dom, backgroundImageService) {
+  constructor(element, dom, backgroundImageService, window) {
     this.element = element;
     this.dom = dom;
     this.backgroundImageService = backgroundImageService;
+    this.window = window;
     
     this.playCanvas = null;
+    this.toolbar = null;
     
     this.buildUi();
     
@@ -31,33 +34,8 @@ export class RootController {
   
   buildUi() {
     this.playCanvas = this.dom.spawnController(this.element, PlayCanvas);
-    
-    const toolbar = this.dom.spawn(this.element, "DIV", ["toolbar"]);
-    
-    this.dom.spawn(toolbar, "INPUT", null, { type: "button", value: "Undo" }).addEventListener("click", () => this.onUndo());
-    this.dom.spawn(toolbar, "INPUT", null, { type: "button", value: "Redo" }).addEventListener("click", () => this.onRedo());
-    this.dom.spawn(toolbar, "INPUT", null, { type: "button", value: "Clear" }).addEventListener("click", () => this.onClear());
-    
-    this.dom.spawn(toolbar, "INPUT", null, {
-      type: "button",
-      style: "background-color: #ffffff",
-    }).addEventListener("click", (event) => this.onPaletteClick(event));
-    this.dom.spawn(toolbar, "INPUT", null, {
-      type: "button",
-      style: "background-color: #000000",
-    }).addEventListener("click", (event) => this.onPaletteClick(event));
-    this.dom.spawn(toolbar, "INPUT", null, {
-      type: "button",
-      style: "background-color: #ff0000",
-    }).addEventListener("click", (event) => this.onPaletteClick(event));
-    this.dom.spawn(toolbar, "INPUT", null, {
-      type: "button",
-      style: "background-color: #008000",
-    }).addEventListener("click", (event) => this.onPaletteClick(event));
-    this.dom.spawn(toolbar, "INPUT", null, {
-      type: "button",
-      style: "background-color: #0000ff",
-    }).addEventListener("click", (event) => this.onPaletteClick(event));
+    this.toolbar = this.dom.spawnController(this.element, Toolbar);
+    this.toolbar.delegate = this;
   }
   
   /* Events.
@@ -75,8 +53,22 @@ export class RootController {
     this.playCanvas.clear();
   }
   
-  onPaletteClick(event) {
-    this.playCanvas.setColor(event.target.style.backgroundColor);
+  onSetColor(color) {
+    this.playCanvas.setColor(color);
+  }
+  
+  onSetLineWidth(width) {
+    this.playCanvas.setLineWidth(width);
+  }
+  
+  onSetTool(tool) {
+    this.playCanvas.setTool(tool);
+  }
+  
+  onCaption() {
+    const text = this.window.prompt("Caption:", this.playCanvas.caption);
+    if (!text) return;
+    this.playCanvas.setCaption(text);
   }
   
 }

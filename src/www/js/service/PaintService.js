@@ -80,7 +80,18 @@ export class PaintService {
   }
   
   setLineWidth(width) {
+    width = ~~width;
+    if (width < 1) width = 1;
     this.lineWidth = width;
+  }
+  
+  setTool(tool) {
+    switch (tool) {
+      case "pencil":
+        break;
+      default: return;
+    }
+    this.tool = tool;
   }
    
   beginStroke(point) {

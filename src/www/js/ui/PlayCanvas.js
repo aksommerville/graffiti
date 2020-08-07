@@ -20,6 +20,7 @@ export class PlayCanvas {
     this.renderTimeout = null;
     this.renderDebounceTime = 100;
     this.backgroundImage = null;
+    this.caption = "";
     
     this.initializeCanvas();
   }
@@ -60,6 +61,19 @@ export class PlayCanvas {
     this.paintService.setColor(color);
   }
   
+  setTool(tool) {
+    this.paintService.setTool(tool);
+  }
+  
+  setLineWidth(width) {
+    this.paintService.setLineWidth(width);
+  }
+  
+  setCaption(caption) {
+    this.caption = caption;
+    this.renderLater();
+  }
+  
   setBackgroundImage(image) {
     this.backgroundImage = image;
     this.renderLater();
@@ -86,6 +100,16 @@ export class PlayCanvas {
     }
     
     this.paintService.render(context);
+    
+    if (this.caption) {
+      const bottomMargin = 20;
+      context.textAlign = "center";
+      context.font = "24pt sans-serif";
+      context.fillStyle = "#ffffff";
+      context.strokeStyle = "#000000";
+      context.strokeText(this.caption, this.element.width / 2, this.element.height - bottomMargin);
+      context.fillText(this.caption, this.element.width / 2, this.element.height - bottomMargin);
+    }
   }
   
   /* Coordinates.
