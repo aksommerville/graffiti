@@ -54,6 +54,7 @@ POST /api/player/logout
 -------------------------------------------------------------
 POST /api/room/new
 => Room
+Initially empty, you must join explicitly.
 
 GET /api/room?id
 => Room
@@ -64,9 +65,12 @@ PUT /api/room?id
 <= Room
 => Room
 
--------------------------------------------------------------
-POST /api/join?roomId&playerId
-POST /api/leave?roomId&playerId
+POST /api/room/join?id
+=> Room
+
+POST /api/room/leave
+
+Player may join no more than one room at a time.
 
 =============================================================
 Types
@@ -74,13 +78,17 @@ Types
 
 Room {
   id: string
+  ownerId: string
   players: Player[]
   state: "gather" | "play" | "conclude" | "cancel"
-  startTime: string(8601)
-  endTime: string(8601)
+  startTime: ms
+  endTime: ms
+  permitObservation: boolean // can players see this room's content without joining?
+  openToPublic: boolean // can everybody join? (for now this is mandatory)
+  permitMutation: boolean // if true, anyone who can read it can also write (otherwise only the owner)
 }
 
 Player {
-  id: string // canonical secretish user id
+  id: string // canonical user id
   name: string // for display
 }

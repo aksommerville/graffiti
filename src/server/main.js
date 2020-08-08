@@ -3,6 +3,7 @@ const http = require("http");
 const https = require("https");
 const { guessMimeType } = require("./mime.js");
 const userService = require("./userService.js");
+const roomService = require("./roomService.js");
 
 const serverInterface = process.env["INTF"] || "localhost";
 const serverPort = +(process.env["PORT"] || "8080");
@@ -101,6 +102,12 @@ function serveSelfTest(request, response) {
     console.log(`  ${session.id} '${session.name}' ${session.expire}`);
   }
   
+  const rooms = roomService.getAll();
+  console.log("Rooms:");
+  for (const room of rooms) {
+    console.log(`  ${JSON.stringify(room)}`);
+  }
+  
   console.log("**** END OF SELF TEST ****");
 
   // Don't tell the user that this service exists.
@@ -117,6 +124,7 @@ function validateUserName(name) {
 
 function validateUserId(id) {
   if (!id) return false;
+  // We can change the rules, but please do not allow '$' -- we use that to distinguish temporary ones
   return !!id.match(/^[0-9a-zA-Z_\-.]{1,12}$/);
 }
 
@@ -176,6 +184,85 @@ function serveLogout(request, response) {
   return serveVoid(request, response);
 }
 
+/* /api/room
+ ****************************************************************/
+ 
+function serveNewRoom(request, response) {
+  const room = roomService.createRoom(request.user.id);
+  return serveJson(request, response, room);
+}
+ 
+function serveGetRoom(request, response) {
+  const id = request.urlObject.searchParams.get("id");
+  if (!id) return serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "'id' required",
+  });
+  const room = roomService.getRoom(id);
+  if (!roomService.roomIsVisibleToUser(room, request.user.id)) {
+    return serveError(request, response, 404);
+  }
+  return serveJson(request, response, room);
+}
+ 
+function serveUpdateRoom(request, response) {
+  const id = request.urlObject.searchParams.get("id");
+  if (!id) return serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "'id' required",
+  });
+  const room = roomService.getRoom(id);
+  if (!room) return serveError(request, response, 404);
+  if (!roomService.roomIsMutableToUser(room, request.user.id)) {
+    return serveError(request, response, 403);
+  }
+  try {
+    const incomingRoom = JSON.parse(request.body);
+    const modified = roomService.modifyRoom(room, incomingRoom);
+    return serveJson(request, response, modified);
+  } catch (e) {
+    return serveError(request, response, {
+      statusCode: 400,
+      statusMessage: "Invalid room changes.",
+    });
+  }
+}
+ 
+function serveDeleteRoom(request, response) {
+  const id = request.urlObject.searchParams.get("id");
+  if (!id) return serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "'id' required",
+  });
+  const room = roomService.getRoom(id);
+  if (!roomService.roomIsMutableToUser(room, request.user.id)) {
+    return serveError(request, response, 403);
+  }
+  roomService.deleteRoom(room);
+  return serveVoid(request, response);
+}
+ 
+function serveJoinRoom(request, response) {
+  const id = request.urlObject.searchParams.get("id");
+  if (!id) return serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "'id' required",
+  });
+  const room = roomService.getRoom(id);
+  if (!roomService.join(room, request.user.id)) {
+    return serveError(request, response, 403);
+  }
+  return serveJson(request, response, room);
+}
+ 
+function serveLeaveRoom(request, response) {
+  const room = roomService.getRoomForUserId(request.user.id);
+  if (room) {
+    roomService.leave(room, request.user.id);
+  }
+  return serveVoid(request, response);
+}
+
 /* REST dispatch.
  ******************************************************************/
 
@@ -204,12 +291,12 @@ function serveApi(request, response) {
   
     case "DELETE /api/player": return serveDeletePlayer(request, response);
     case "POST /api/player/logout": return serveLogout(request, response);
-    case "POST /api/room/new": return serveError(request, response, 599);
-    case "GET /api/room": return serveError(request, response, 599);
-    case "DELETE /api/room": return serveError(request, response, 599);
-    case "PUT /api/room": return serveError(request, response, 599);
-    case "POST /api/join": return serveError(request, response, 599);
-    case "POST /api/leave": return serveError(request, response, 599);
+    case "POST /api/room/new": return serveNewRoom(request, response);
+    case "GET /api/room": return serveGetRoom(request, response);
+    case "DELETE /api/room": return serveDeleteRoom(request, response);
+    case "PUT /api/room": return serveUpdateRoom(request, response);
+    case "POST /api/room/join": return serveJoinRoom(request, response);
+    case "POST /api/room/leave": return serveLeaveRoom(request, response);
   
   }
   serveError(request, response, 404);

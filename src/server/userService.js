@@ -31,6 +31,13 @@ function generateAccessToken() {
   return crypto.randomBytes(12).toString("base64");
 }
 
+function generateTemporaryId() {
+  while (1) {
+    const id = "$" + crypto.randomBytes(6).toString("base64");
+    if (!sessions.find(s => s.id === id)) return id;
+  }
+}
+
 /* Check authentication for existing session.
  *******************************************************************/
 
@@ -84,9 +91,11 @@ function login(id, password) {
  
 function loginWithoutCredentials(name) {
   const accessToken = generateAccessToken();
+  const id = generateTemporaryId();
   sessions.push({
     accessToken,
     name,
+    id,
     expire: Date.now() + SESSION_EXPIRE_TIME_MS,
   });
   return accessToken;
@@ -151,6 +160,19 @@ function dropExpiredSessions() {
   }
 }
 
+/* Get the user details visible to the rest of the system, for someone logged in.
+ * This definitely includes name and definitely doesn't include accessToken.
+ ****************************************************************/
+ 
+function getLoggedInUserDetails(id) {
+  const session = sessions.find(s => s.id === id);
+  if (!session) return null;
+  return {
+    id,
+    name: session.name,
+  };
+}
+
 /* TOC
  *****************************************************************/
 
@@ -163,4 +185,5 @@ module.exports = {
   logout,
   getAll,
   dropExpiredSessions,
+  getLoggedInUserDetails,
 };
