@@ -8,7 +8,11 @@ clean:;rm -rf mid out
 export INTF:=localhost
 export PORT:=8080
 
-ifeq (,$(shell which jspp))
+ALWAYS_SERVE_FROM_SRC:=please
+
+ifneq (,$(ALWAYS_SERVE_FROM_SRC))
+  serve:;HTDOCS=$(shell realpath src/www) node src/server/main.js
+else ifeq (,$(shell which jspp))
   serve:;HTDOCS=$(shell realpath src/www) node src/server/main.js
 else
 

@@ -81,6 +81,7 @@ function serveStaticFile(request, response, root) {
       response.statusCode = 200;
       response.status = "OK";
       response.end(data);
+      logTransaction(request, response);
     });
   });
 }

@@ -87,6 +87,7 @@ function roomIsMutableToUser(room, userId) {
 
 function roomIsJoinableToUser(room, userId) {
   if (!room) return false;
+  if (room.state !== "gather") return false;
   if (room.ownerId === userId) return true;
   if (room.openToPublic) return true;
   return false;
@@ -97,7 +98,7 @@ function roomIsJoinableToUser(room, userId) {
  
 function modifyRoom(original, incoming) {
   const fail = () => { throw new Error("invalid room modification"); };
-
+  
   if (!original || !incoming) fail();
   
   if (incoming.hasOwnProperty("id")) {
@@ -107,7 +108,7 @@ function modifyRoom(original, incoming) {
   
   if (incoming.hasOwnProperty("ownerId")) {
     // Not allowed to modify (ownerId)
-    if (original.ownerId !== room.ownerId) fail();
+    if (original.ownerId !== incoming.ownerId) fail();
   }
   
   if (incoming.hasOwnProperty("players")) {
@@ -142,20 +143,20 @@ function modifyRoom(original, incoming) {
   
   if (incoming.hasOwnProperty("permitObservation")) {
     if (typeof(incoming.permitObservation) !== "boolean") fail();
-    room.permitObservation = incoming.permitObservation;
+    original.permitObservation = incoming.permitObservation;
   }
   
   if (incoming.hasOwnProperty("openToPublic")) {
     if (typeof(incoming.openToPublic) !== "boolean") fail();
-    room.openToPublic = incoming.openToPublic;
+    original.openToPublic = incoming.openToPublic;
   }
   
   if (incoming.hasOwnProperty("permitMutation")) {
     if (typeof(incoming.permitMutation) !== "boolean") fail();
-    room.permitMutation = incoming.permitMutation;
+    original.permitMutation = incoming.permitMutation;
   }
   
-  return room;
+  return original;
 }
 
 /* Delete room.

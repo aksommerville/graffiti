@@ -11,7 +11,7 @@ export class BackgroundImageService {
   }
   
   loadRandomImage() {
-    const url = "https://picsum.photos/320/240";
+    const url = "https://picsum.photos/800/600";
     return this.window.fetch(url).then((response) => {
       if (!response.ok) throw response;
       return response.blob().then((blob) => {

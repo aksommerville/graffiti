@@ -13,6 +13,29 @@ body {
   height: 100vh;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+}
+
+header {
+  background-color: #002000;
+  border-bottom: 1px solid #000000;
+  min-height: 4em;
+}
+
+footer {
+  background-color: #002000;
+  border-top: 1px solid #000000;
+  min-height: 4em;
+}
+
+.RootController > .main {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.LoginForm tr.submit {
+  text-align: right;
 }
