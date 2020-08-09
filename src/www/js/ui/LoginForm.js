@@ -15,6 +15,7 @@ export class LoginForm {
     this.USE_ACCOUNTS = false; // It works and all, but why?
     
     this.onsubmit = null; // (name, id, password)
+    this.onpractice = null; // ()
     
     this.buildUi();
     this.element.querySelector("input[name='Name']").focus();
@@ -49,6 +50,16 @@ export class LoginForm {
       const help = this.dom.spawn(this.element, "DIV", ["help"], null,
         "Pick any name you like."
       );
+    }
+    
+    if (true) { // enable practice mode
+      const practiceButton = this.dom.spawn(this.element, "INPUT", null, {
+        type: "button",
+        value: "Local Practice Mode",
+      });
+      practiceButton.addEventListener("click", () => {
+        if (this.onpractice) this.onpractice();
+      });
     }
   }
   

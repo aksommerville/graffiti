@@ -2,16 +2,19 @@
  */
  
 import { PaintService } from "/js/service/PaintService.js";
+import { BackgroundImageService } from "/js/service/BackgroundImageService.js";
  
 export class PlayCanvas {
 
   static getDependencies() {
-    return [HTMLCanvasElement, Window, PaintService];
+    return [HTMLCanvasElement, Window, PaintService, "discriminator", BackgroundImageService];
   }
-  constructor(element, window, paintService) {
+  constructor(element, window, paintService, discriminator, backgroundImageService) {
     this.element = element;
     this.window = window;
     this.paintService = paintService;
+    this.discriminator = discriminator;
+    this.backgroundImageService = backgroundImageService;
     
     this.mouseMoveListener = null;
     this.mouseUpListener = null;
@@ -21,6 +24,7 @@ export class PlayCanvas {
     this.renderDebounceTime = 100;
     this.backgroundImage = null;
     this.caption = "";
+    this.interactive = true;
     
     this.initializeCanvas();
   }
@@ -70,6 +74,7 @@ export class PlayCanvas {
   }
   
   setCaption(caption) {
+    if (!this.interactive) return;
     this.caption = caption;
     this.renderLater();
   }
@@ -77,6 +82,19 @@ export class PlayCanvas {
   setBackgroundImage(image) {
     this.backgroundImage = image;
     this.renderLater();
+  }
+  
+  setInteractive(interactive) {
+    if (interactive) {
+      if (this.interactive) return;
+      this.interactive = true;
+    } else {
+      if (!this.interactive) return;
+      this.interactive = false;
+      if (this.mouseUpListener) {
+        this.onMouseUp(null);
+      }
+    }
   }
   
   /* Render.
@@ -90,6 +108,7 @@ export class PlayCanvas {
   
   renderNow() {
     this.renderTimeout = null;
+    if (!this.element) return;
     const context = this.element.getContext("2d");
     
     if (this.backgroundImage) {
@@ -104,9 +123,10 @@ export class PlayCanvas {
     if (this.caption) {
       const bottomMargin = 20;
       context.textAlign = "center";
-      context.font = "24pt sans-serif";
+      context.font = "24pt serif";
       context.fillStyle = "#ffffff";
       context.strokeStyle = "#000000";
+      context.lineWidth = 6;
       context.strokeText(this.caption, this.element.width / 2, this.element.height - bottomMargin);
       context.fillText(this.caption, this.element.width / 2, this.element.height - bottomMargin);
     }
@@ -146,14 +166,15 @@ export class PlayCanvas {
   }
   
   onMouseUp(event) {
-    if (event.button !== 0) return;
-    const canvasPoint = this.transformCanvasFromEvent(event);
+    if (event && (event.button !== 0)) return;
+    const canvasPoint = event ? this.transformCanvasFromEvent(event) : this.recentMouse;
     this.paintService.endStroke(canvasPoint);
     this.renderLater();
     this.removeMouseListeners();
   }
    
   onMouseDown(event) {
+    if (!this.interactive) return;
     if (event.button !== 0) return;
     if (this.mouseMoveListener || this.mouseUpListener) return;
     this.mouseMoveListener = (event) => this.onMouseMove(event);
@@ -164,6 +185,103 @@ export class PlayCanvas {
     this.recentMouse = canvasPoint;
     this.paintService.beginStroke(canvasPoint);
     this.renderLater();
+  }
+  
+  /* Encode
+   **********************************************************/
+   
+  encode() {
+    const actions = [];
+    
+    if (this.backgroundImage) {
+      const url = this.backgroundImage.getAttribute("permanent-url");
+      if (url) {
+        actions.push(`bg ${url}`);
+      }
+    }
+    
+    for (const action of this.paintService.actions) {
+      const serial = this.encodeAction(action);
+      if (serial) actions.push(serial);
+    }
+    
+    if (this.caption) {
+      actions.push(`caption ${JSON.stringify(this.caption)}`);
+    }
+    
+    return actions.join("\n");
+  }
+  
+  encodeAction(action) {
+    switch (action[0]) {
+    
+      case "pencil": return action.toString().replace(/,/g, " "); // "pencil COLOR WIDTH X0 Y0 ... Xn Yn"
+    
+      default: console.error(`No encoder for action '${action[0]}'`);
+    }
+  }
+  
+  /* Decode.
+   * This discards any existing content.
+   *********************************************************/
+   
+  decode(serial) {
+
+    this.paintService.actions = [];
+    this.backgroundImage = null;
+    this.caption = "";
+    
+    for (let p=0; p<serial.length; ) {
+      let nlp = serial.indexOf("\n", p);
+      if (nlp < 0) nlp = serial.length;
+      const command = serial.substring(p, nlp).trim().split(/\s+/);
+      p = nlp + 1;
+      this.decodeCommand(command);
+    }
+    
+    this.renderLater();
+  }
+  
+  decodeCommand(command) {
+    switch (command[0]) {
+      case "bg": this.decodeCommandBg(command[1]); break;
+      case "caption": this.decodeCommandCaption(command.slice(1).join(' ')); break;
+      case "pencil": this.decodeCommandPencil(command); break;
+      case undefined: break;
+      default: console.error(`No decoder for command: ${command}`);
+    }
+  }
+  
+  decodeCommandBg(url) {
+    this.backgroundImageService.loadImageFromUrl(url).then((image) => {
+      this.backgroundImage = image;
+      this.renderLater();
+    });
+  }
+  
+  decodeCommandCaption(token) {
+    try {
+      this.caption = JSON.parse(token);
+    } catch (e) {}
+    if (typeof(this.caption) !== "string") {
+      this.caption = "";
+    }
+  }
+  
+  decodeCommandPencil(command) {
+    // Draw it just as if we had received the corresponding events. Neat, huh?
+    this.paintService.setColor(command[1] || "#000000");
+    this.paintService.setLineWidth(+command[2] || 1);
+    this.paintService.setTool("pencil");
+    let x = +command[3];
+    let y = +command[4];
+    this.paintService.beginStroke([x, y]);
+    for (let p=5; p<command.length; p+=2) {
+      x = +command[p];
+      y = +command[p + 1];
+      this.paintService.continueStroke([x, y]);
+    }
+    this.paintService.endStroke([x, y]);
   }
   
 }

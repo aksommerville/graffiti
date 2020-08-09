@@ -64,6 +64,13 @@ POST /api/player/password
   new: string
 }
 
+GET /api/player?id
+=> {
+  id: string
+  name: string
+}
+TODO: avatar
+
 -------------------------------------------------------------
 POST /api/room/new
 => Room
@@ -74,6 +81,7 @@ GET /api/room?[id]
 Omit id to get the joined room.
 
 DELETE /api/room?[id]
+Obviates the need for users to leave.
 
 PUT /api/room?[id]
 <= Room
@@ -85,6 +93,10 @@ POST /api/room/join?id
 POST /api/room/leave
 
 Player may join no more than one room at a time.
+
+-------------------------------------------------------------
+POST /api/image
+<= text form of image changes
 
 -------------------------------------------------------------
 GET /api/poll

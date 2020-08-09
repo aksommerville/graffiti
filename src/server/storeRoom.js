@@ -9,6 +9,7 @@
  *   showInPublicLists
  *   permitAnyLogin // must be true, since we don't have fine-grained authz yet (TODO)
  *   permitAnyEdit // if false, only the owner can edit
+ *   improvements: { userId: text }
  * }
  */
  
@@ -29,6 +30,7 @@ function newEntity(id) {
     showInPublicLists: false,
     permitAnyLogin: true,
     permitAnyEdit: false,
+    improvements: {},
   };
 }
 
@@ -81,6 +83,25 @@ function applyChanges(original, incoming) {
       for (const id of incoming.userIds) {
         if (modified.userIds.indexOf(id) < 0) {
           modified.userIds = incoming.userIds;
+          reallyChanged = true;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (incoming.improvements) {
+    const akeys = Object.keys(modified.improvements);
+    const bkeys = Object.keys(incoming.improvements);
+    if (akeys.length !== bkeys.length) {
+      modified.improvements = incoming.improvements;
+      reallyChanged = true;
+    } else {
+      for (const userId of bkeys) {
+        const fresh = incoming.improvements[userId];
+        const prior = modified.improvements[userId];
+        if (fresh !== prior) {
+          modified.improvements = incoming.improvements;
           reallyChanged = true;
           break;
         }

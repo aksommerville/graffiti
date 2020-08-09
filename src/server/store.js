@@ -37,7 +37,7 @@ function init(slices) {
       throw new Error(`duplicate slice name '${slice.name}'`);
     }
     schema[slice.name] = slice.schema || {};
-    store[slice.name] = [];
+    store[slice.name] = {};
   }
 }
 
@@ -50,7 +50,7 @@ function examineFullContent() {
 
 function getEntitiesOfType(type) {
   if (!store[type]) return [];
-  return store[type];
+  return Object.values(store[type]);
 }
 
 function getEntityOfAnyTypeById(id) {
@@ -267,7 +267,7 @@ module.exports = {
   
   getEntityOfAnyTypeById,
   examineFullContent,
-  getEntitiesOfType,
+  getEntitiesOfType, // => array
   
   getEntity, // (type,id) => entity
   addEntity, // (type,entity?) => entity

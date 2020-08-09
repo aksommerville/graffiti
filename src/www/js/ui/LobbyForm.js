@@ -18,6 +18,10 @@ export class LobbyForm {
     this.onjoin = null; // (id)
     
     this.buildUi();
+    this.element.querySelector("input[name='name']").focus();
+  }
+  
+  onDetachFromDom() {
   }
   
   /* UI

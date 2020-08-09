@@ -44,6 +44,7 @@ function createRoom(userId) {
   const room = store.addEntity("room", {
     ...storeRoom.schema.newEntity(null),
     ownerUserId: userId,
+    userIds: [userId],
   });
   return room;
 }
@@ -101,6 +102,35 @@ function leaveRoom(sessionId, roomId) {
   });
 }
 
+/* Accept uploaded image improvments.
+ ***************************************************/
+ 
+function registerImprovement(roomId, userId, serial) {
+  const room = store.getEntity("room", roomId);
+  if (!room) return null;
+  if (room.userIds.indexOf(userId) < 0) return null;
+  
+  // Switching from "play" to "conclude" state is our job.
+  let state = room.state;
+  if (state === "play") {
+    const usersNowAccountedFor = Object.keys(room.improvements);
+    if (usersNowAccountedFor.indexOf(userId) < 0) {
+      usersNowAccountedFor.push(userId);
+    }
+    if (usersNowAccountedFor.length === room.userIds.length) {
+      state = "conclude";
+    }
+  }
+  
+  return store.updateEntity("room", roomId, {
+    improvements: {
+      ...room.improvements,
+      [userId]: serial,
+    },
+    state,
+  });
+}
+
 /* TOC
  *************************************************/
  
@@ -115,4 +145,6 @@ module.exports = {
   leaveRoom, // (sessionId, roomId)
   
   userMayEditRoom,
+  
+  registerImprovement, // (roomId, userId, serial)
 };

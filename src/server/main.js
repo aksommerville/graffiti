@@ -28,16 +28,19 @@ function serveSelfTest(request, response) {
   const storeContent = store.examineFullContent();
 
   console.log("All users (permanent list):");
-  for (const user of storeContent.user) {
+  for (const userId of Object.keys(storeContent.user)) {
+    const user = storeContent.user[userId];
     console.log(`  ${user.id} '${user.name}'`);
   }
   console.log("Currently logged in:");
-  for (const session of storeContent.session) {
-    console.log(`  ${session.id} '${session.name}' ${session.expire}`);
+  for (const sessionId of Object.keys(storeContent.session)) {
+    const session = storeContent.session[sessionId];
+    console.log(`  ${session.id} user=${session.userId} ${session.expireTime} d=${session.changes.length}`);
   }
   
   console.log("Rooms:");
-  for (const room of storeContent.room) {
+  for (const roomId of Object.keys(storeContent.room)) {
+    const room = storeContent.room[roomId];
     console.log(`  ${JSON.stringify(room)}`);
   }
   
@@ -131,6 +134,17 @@ function servePasswordChange(request, response) {
   respond.serveVoid(request, response);
 }
 
+function serveGetPlayer(request, response) {
+  const userId = request.urlObject.searchParams.get("id");
+  if (!userId) return respond.serveError(request, response, 400);
+  const user = store.getEntity("user", userId);
+  if (!user) return respond.serveError(request, response, 404);
+  return respond.serveJson(request, response, {
+    id: user.id,
+    name: user.name,
+  });
+}
+
 /* /api/room
  ****************************************************************/
  
@@ -218,7 +232,20 @@ function serveLeaveRoom(request, response) {
   const roomId = request.session.roomId;
   if (!roomId) return respond.serveVoid(request, response);
   roomService.leaveRoom(sessionId, roomId);
-  respond.serveVoid(request, response, room);
+  respond.serveVoid(request, response);
+}
+
+/* Receive an improved image.
+ ************************************************************/
+ 
+function servePostImage(request, response) {
+  const userId = request.session.userId;
+  const roomId = request.session.roomId;
+  const serial = request.body;
+  if (!userId || !roomId) return respond.serveError(request, response, 400);
+  const room = roomService.registerImprovement(roomId, userId, serial);
+  if (!room) return respond.serveError(request, response, 400);
+  respond.serveVoid(request, response);
 }
 
 /* Poll service.
@@ -288,12 +315,14 @@ function serveApi(request, response) {
     case "POST /api/player/logout": return serveLogout(request, response);
     case "POST /api/player/update": return serveUpdatePlayer(request, response);
     case "POST /api/player/password": return servePasswordChange(request, response);
+    case "GET /api/player": return serveGetPlayer(request, response);
     case "POST /api/room/new": return serveNewRoom(request, response);
     case "GET /api/room": return serveGetRoom(request, response);
     case "DELETE /api/room": return serveDeleteRoom(request, response);
     case "PUT /api/room": return serveUpdateRoom(request, response);
     case "POST /api/room/join": return serveJoinRoom(request, response);
     case "POST /api/room/leave": return serveLeaveRoom(request, response);
+    case "POST /api/image": return servePostImage(request, response);
     case "GET /api/poll": return servePoll(request, response);
   
   }

@@ -39,3 +39,21 @@ footer {
 .LoginForm tr.submit {
   text-align: right;
 }
+
+.JudgeController > .imagesContainer {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ImprovedImage {
+  width: 45%;
+  display: flex;
+  border: 1px solid #000000;
+  border-radius: 1em;
+  box-shadow: #000000 0 0 1em;
+  margin: 0.5em;
+}
+
+.ImprovedImage > canvas {
+  border-radius: 1em;
+}

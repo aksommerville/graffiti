@@ -8,6 +8,7 @@ import { LoginForm } from "/js/ui/LoginForm.js";
 import { LobbyForm } from "/js/ui/LobbyForm.js";
 import { GatherForm } from "/js/ui/GatherForm.js";
 import { PlayController } from "/js/ui/PlayController.js";
+import { JudgeController } from "/js/ui/JudgeController.js";
 
 export class RootController {
 
@@ -21,8 +22,20 @@ export class RootController {
     this.userService = userService;
     this.roomService = roomService;
     
+    this.CLOCK_POLL_TIME = 500;
+    
+    this.practiceMode = false;
+    this.clockInterval = null;
+    
     this.buildUi();
     this.selectAndDisplayMainView();
+  }
+  
+  onDetachFromDom() {
+    if (this.clockInterval) {
+      this.window.clearInterval(this.clockInterval);
+      this.clockInterval = null;
+    }
   }
   
   /* UI.
@@ -35,6 +48,7 @@ export class RootController {
     this.dom.spawn(header, "DIV", ["errorMessage"]);
     this.dom.spawn(header, "DIV", ["user"]);
     this.dom.spawn(header, "DIV", ["room"]);
+    this.dom.spawn(header, "DIV", ["clock"]);
     
     const main = this.dom.spawn(this.element, "DIV", ["main"], { role: "main" });
     const footer = this.dom.spawn(this.element, "FOOTER");
@@ -43,7 +57,9 @@ export class RootController {
   selectAndDisplayMainView() {
     const main = this.element.querySelector(".main");
     main.innerHTML = "";
-    if (!this.userService.user) {
+    if (this.practiceMode) {
+      this.displayPlayView(main);
+    } else if (!this.userService.user) {
       this.displayLoginView(main);
     } else if (!this.roomService.room) {
       this.displayLobbyView(main);
@@ -57,28 +73,36 @@ export class RootController {
   }
   
   displayLoginView(container) {
+    if (this.element.querySelector(".LoginForm")) return;
     const controller = this.dom.spawnController(container, LoginForm);
     controller.onsubmit = (name, id, password) => this.onLogin(name, id, password);
+    controller.onpractice = () => this.onBeginPracticeMode();
   }
   
   displayLobbyView(container) {
+    if (this.element.querySelector(".LobbyForm")) return;
     const controller = this.dom.spawnController(container, LobbyForm);
     controller.oncreate = (id) => this.onCreateRoom(id);
     controller.onjoin = (id) => this.onJoinRoom(id);
   }
   
   displayGatherView(container) {
+    if (this.element.querySelector(".GatherForm")) return;
     const controller = this.dom.spawnController(container, GatherForm);
     controller.onbegin = () => this.onBeginGame();
     controller.oncancel = () => this.onCancelGame();
+    controller.onstarted = () => this.onGameStarted();
   }
   
   displayPlayView(container) {
+    if (this.element.querySelector(".PlayController")) return;
     const controller = this.dom.spawnController(container, PlayController);
+    controller.onfinished = () => this.onGameFinished();
   }
   
   displayConcludeView(container) {
-    container.innerText = "TODO: Conclude";
+    if (this.element.querySelector(".JudgeController")) return;
+    const controller = this.dom.spawnController(container, JudgeController);
   }
   
   displayCancelView(container) {
@@ -90,8 +114,13 @@ export class RootController {
    
   refreshUserUi() {
     const element = this.element.querySelector("header > .user");
-    if (this.userService.user) {
-      element.innerText = `Logged in as '${this.userService.user.name}'`;
+    if (this.practiceMode) {
+      element.innerText = "Local practice mode";
+    } else if (this.userService.user) {
+      const userId = this.userService.user.userId;
+      this.userService.getUserNameById(userId).then((name) => {
+        element.innerText = `Logged in as '${name}'`;
+      });
     } else {
       element.innerText = "";
     }
@@ -104,6 +133,37 @@ export class RootController {
     const element = this.element.querySelector("header > .room");
     if (this.roomService.room) {
       element.innerText = `In room '${this.roomService.room.id}'`;
+      this.enableClock(true);
+    } else {
+      element.innerText = "";
+      this.enableClock(false);
+    }
+  }
+  
+  enableClock(enable) {
+    if (enable) {
+      if (this.clockInterval) return;
+      this.clockInterval = this.window.setInterval(() => this.updateClock(), this.CLOCK_POLL_TIME);
+    } else {
+      if (!this.clockInterval) return;
+      this.window.clearInterval(this.clockInterval);
+      this.clockInterval = null;
+      this.element.querySelector(".clock").innerText = "";
+    }
+  }
+  
+  updateClock() {
+    const element = this.element.querySelector(".clock");
+    if (this.roomService.room && this.roomService.room.endTime) {
+      const msRemaining = this.roomService.room.endTime - Date.now();
+      if (msRemaining <= 0) {
+        element.innerText = "Time up!";
+      } else {
+        let seconds = Math.floor(msRemaining / 1000);
+        let minutes = Math.floor(seconds / 60);
+        seconds %= 60;
+        element.innerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }
     } else {
       element.innerText = "";
     }
@@ -139,6 +199,7 @@ export class RootController {
    **************************************************************/
    
   onLogin(name, id, password) {
+    this.practiceMode = false;
     this.userService.login(name, id, password).then((response) => {
       this.clearMessage();
       this.refreshUserUi();
@@ -146,6 +207,13 @@ export class RootController {
     }).catch((error) => {
       this.setErrorMessageFromObject(error);
     });
+  }
+  
+  onBeginPracticeMode() {
+    this.practiceMode = true;
+    this.clearMessage();
+    this.refreshUserUi();
+    this.selectAndDisplayMainView();
   }
   
   onCreateRoom() {
@@ -168,7 +236,6 @@ export class RootController {
   
   onBeginGame() {
     this.roomService.begin().then((response) => {
-      this.selectAndDisplayMainView();
     }).catch((error) => {
       this.setErrorMessageFromObject(error);
     });
@@ -176,10 +243,19 @@ export class RootController {
   
   onCancelGame() {
     this.roomService.cancel().then((response) => {
+      this.refreshRoomUi();
       this.selectAndDisplayMainView();
     }).catch((error) => {
       this.setErrorMessageFromObject(error);
     });
+  }
+  
+  onGameStarted() {
+    this.selectAndDisplayMainView();
+  }
+  
+  onGameFinished() {
+    this.selectAndDisplayMainView();
   }
   
 }

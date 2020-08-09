@@ -4,6 +4,19 @@
 import { Transport } from "/js/service/Transport.js";
 import { RoomService } from "/js/service/RoomService.js";
 
+export class User {
+  constructor(id, name) {
+    this.id = id;
+    this.name = name || "";
+    this.time = Date.now(); // Last time we fetched from server.
+  }
+  
+  repr() {
+    if (this.name) return this.name;
+    return this.id;
+  }
+}
+
 export class UserService {
 
   static getDependencies() {
@@ -17,8 +30,10 @@ export class UserService {
     this.successPollRestartTime =  500;
     this.timeoutPollRestartTime = 1000;
     this.errorPollRestartTime =  10000;
+    this.userRefreshTime = 1000 * 30;
     
-    this.user = null;
+    this.user = null; // *session* response; our user
+    this.users = []; // User; metadata around all known users (esp name)
   }
   
   /* Login.
@@ -38,6 +53,7 @@ export class UserService {
         return response.json().then((body) => {
           this.transport.accessToken = body.accessToken;
           this.user = body;
+          this.addUser(id, name);
           this.restartPoll();
           return this.user;
         });
@@ -47,6 +63,7 @@ export class UserService {
         return response.json().then((body) => {
           this.transport.accessToken = body.accessToken;
           this.user = body;
+          this.addUser(id, name);
           this.restartPoll();
           return this.user;
         });
@@ -85,6 +102,52 @@ export class UserService {
       } else {
         this.window.setTimeout(() => this.restartPoll(), this.errorPollRestartTime);
       }
+    });
+  }
+  
+  /* User list.
+   *******************************************************/
+   
+  addUser(id, name) {
+    for (const user of this.users) {
+      if (user.id === id) {
+        user.name = name;
+        user.time = Date.now();
+        return user;
+      }
+    }
+    const user = new User(id, name);
+    this.users.push(user);
+    return user;
+  }
+  
+  // => Promise<string>
+  getUserNameById(id) {
+    let user = this.users.find(u => u.id === id);
+    if (user) {
+      if (user.time + this.userRefreshTime < Date.now()) {
+        return this.fetchAndAddUser(id).then((user) => {
+          return user.repr();
+        }).catch((error) => {
+          // We already had a User record, so go with that.
+          return user.repr();
+        });
+      } else {
+        return Promise.resolve(user.repr());
+      }
+    } else {
+      return this.fetchAndAddUser(id).then((user) => {
+        return user.repr();
+      }); // no fallback in this case
+    }
+  }
+  
+  fetchAndAddUser(id) {
+    return this.transport.get("/api/player", { id }).then((response) => {
+      return response.json().then((transportUser) => {
+        const user = this.addUser(transportUser.id, transportUser.name);
+        return user;
+      });
     });
   }
   

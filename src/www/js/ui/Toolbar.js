@@ -25,6 +25,7 @@ export class Toolbar {
      *   onCaption()
      * TODO Caption size
      * TODO Caption position
+     *   onDebugEncode()
      * }
      */
     this.delegate = {};
@@ -50,6 +51,8 @@ export class Toolbar {
     this.addColorPalette("#00ffff");
     this.addColorPalette("#808080");
     this.addButton("Caption", () => this.onCaption());
+    
+    this.addButton("[DEBUG] Encode", () => this.onDebugEncode());
   }
   
   addButton(label, callback) {
@@ -93,6 +96,11 @@ export class Toolbar {
   onSetColor(color) {
     if (!this.delegate.onSetColor) return;
     this.delegate.onSetColor(color);
+  }
+  
+  onDebugEncode() {
+    if (!this.delegate.onDebugEncode) return;
+    this.delegate.onDebugEncode();
   }
    
 }

@@ -19,14 +19,23 @@ export class PlayController {
     this.window = window;
     this.roomService = roomService;
     
+    this.onfinished = null; // ()
+    
     this.playCanvas = null;
     this.toolbar = null;
     this.backgroundImageUrl = "";
+    this.roomListener = null;
+    this.imageDelivered = false;
     
     this.buildUi();
     
     this.onRoomChanged(this.roomService.room);
-    this.roomService.listen((room) => this.onRoomChanged(room));
+    this.roomListener = this.roomService.listen((room) => this.onRoomChanged(room));
+  }
+  
+  onDetachFromDom() {
+    this.roomService.unlisten(this.roomListener);
+    this.roomListener = null;
   }
   
   /* UI
@@ -72,7 +81,13 @@ export class PlayController {
     this.playCanvas.setCaption(text);
   }
   
+  onDebugEncode() {
+    const serial = this.playCanvas.encode();
+    console.log(`ENCODED IMAGE:\n${serial}`);
+  }
+  
   onRoomChanged(room) {
+  
     const backgroundImageUrl = room ? room.backgroundImageUrl : "";
     if (backgroundImageUrl !== this.backgroundImageUrl) {
       this.backgroundImageUrl = backgroundImageUrl;
@@ -84,6 +99,24 @@ export class PlayController {
         this.playCanvas.setBackgroundImage(null);
       }
     }
+    
+    if (room && (room.endTime <= Date.now())) {
+      this.playCanvas.setInteractive(false);
+      this.deliverImageIfWeHaventYet();
+      if (room.state === "conclude") {
+        if (this.onfinished) this.onfinished();
+      }
+    } else {
+      this.playCanvas.setInteractive(true);
+      this.imageDelivered = false;
+    }
+  }
+  
+  deliverImageIfWeHaventYet() {
+    if (this.imageDelivered) return;
+    const serial = this.playCanvas.encode();
+    this.roomService.deliverEncodedImage(serial);
+    this.imageDelivered = true;
   }
    
 }
