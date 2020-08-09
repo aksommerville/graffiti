@@ -13,15 +13,17 @@ export class RoomService {
     
     this.room = null;
     this.isOwner = false;
+    this.listeners = [];
+    this.nextListenerId = 1;
   }
   
   create() {
     return this.transport.post("/api/room/new").then((response) => {
       return response.json().then((room) => {
-        return this.join(room.id).then((room) => {
-          this.isOwner = true;
-          return room;
-        });
+        this.room = room;
+        this.isOwner = true;
+        this.broadcastRoom();
+        return room;
       });
     });
   }
@@ -31,6 +33,7 @@ export class RoomService {
       return response.json().then((room) => {
         this.room = room;
         this.isOwner = false;
+        this.broadcastRoom();
         return room;
       });
     });
@@ -44,6 +47,7 @@ export class RoomService {
     })).then((response) => {
       return response.json().then((room) => {
         this.room = room;
+        this.broadcastRoom();
         return room;
       });
     });
@@ -54,7 +58,29 @@ export class RoomService {
     return this.transport.delete("/api/room", { id: this.room.id }).then(() => {
       this.room = null;
       this.isOwner = false;
+      this.broadcastRoom();
     });
+  }
+  
+  receiveRoomFromPoll(room) {
+    this.room = room;
+    this.broadcastRoom();
+  }
+  
+  broadcastRoom() {
+    for (const listener of this.listeners) {
+      listener.callback(this.room);
+    }
+  }
+  
+  listen(callback) {
+    const listenerId = this.nextListenerId++;
+    this.listeners.push({ listenerId, callback });
+  }
+  
+  unlisten(listenerId) {
+    const index = this.listeners.findIndex(l => l.listenerId === listenerId);
+    if (index >= 0) this.listeners.splice(index, 1);
   }
   
 }

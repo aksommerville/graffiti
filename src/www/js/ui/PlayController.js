@@ -5,27 +5,28 @@ import { Dom } from "/js/service/Dom.js";
 import { BackgroundImageService } from "/js/service/BackgroundImageService.js";
 import { PlayCanvas } from "/js/ui/PlayCanvas.js";
 import { Toolbar } from "/js/ui/Toolbar.js";
+import { RoomService } from "/js/service/RoomService.js";
 
 export class PlayController {
 
   static getDependencies() {
-    return [HTMLElement, Dom, BackgroundImageService, Window];
+    return [HTMLElement, Dom, BackgroundImageService, Window, RoomService];
   }
-  constructor(element, dom, backgroundImageService, window) {
+  constructor(element, dom, backgroundImageService, window, roomService) {
     this.element = element;
     this.dom = dom;
     this.backgroundImageService = backgroundImageService;
     this.window = window;
+    this.roomService = roomService;
     
     this.playCanvas = null;
     this.toolbar = null;
+    this.backgroundImageUrl = "";
     
     this.buildUi();
     
-    //XXX get from room service
-    this.backgroundImageService.loadRandomImage().then((image) => {
-      this.playCanvas.setBackgroundImage(image);
-    });
+    this.onRoomChanged(this.roomService.room);
+    this.roomService.listen((room) => this.onRoomChanged(room));
   }
   
   /* UI
@@ -69,6 +70,20 @@ export class PlayController {
     const text = this.window.prompt("Caption:", this.playCanvas.caption);
     if (typeof(text) !== "string") return;
     this.playCanvas.setCaption(text);
+  }
+  
+  onRoomChanged(room) {
+    const backgroundImageUrl = room ? room.backgroundImageUrl : "";
+    if (backgroundImageUrl !== this.backgroundImageUrl) {
+      this.backgroundImageUrl = backgroundImageUrl;
+      if (this.backgroundImageUrl) {
+        this.backgroundImageService.loadImageFromUrl(this.backgroundImageUrl).then((image) => {
+          this.playCanvas.setBackgroundImage(image);
+        });
+      } else {
+        this.playCanvas.setBackgroundImage(null);
+      }
+    }
   }
    
 }

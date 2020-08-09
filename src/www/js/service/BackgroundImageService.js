@@ -30,6 +30,20 @@ export class BackgroundImageService {
     });
   }
   
+  loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.src = url;
+      image.addEventListener("load", (event) => {
+        image.setAttribute("permanent-url", url);
+        resolve(image);
+      });
+      image.addEventListener("error", (error) => {
+        reject(error);
+      });
+    });
+  }
+  
 }
 
 BackgroundImageService.singleton = true;

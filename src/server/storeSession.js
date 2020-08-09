@@ -112,6 +112,11 @@ function applyChanges(original, incoming) {
     }
   }
   
+  if ((incoming.pendingPoll !== undefined) && (modified.pendingPoll !== incoming.pendingPoll)) {
+    modified.pendingPoll = incoming.pendingPoll;
+    reallyChanged = true;
+  }
+  
   if ((incoming.roomId !== undefined) && (modified.roomId !== incoming.roomId)) {
     modified.roomId = incoming.roomId;
     reallyChanged = true;

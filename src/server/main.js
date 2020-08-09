@@ -149,6 +149,7 @@ function serveNewRoom(request, response) {
     roomId: room.id,
   });
   if (!session) return respond.serveError(request, response, 500);
+  roomService.acquireBackgroundImageForEntity(room.id);
   return respond.serveJson(request, response, room);
 }
  
@@ -164,6 +165,7 @@ function serveGetRoom(request, response) {
 }
  
 function serveUpdateRoom(request, response) {
+  const userId = request.session.userId;
   const roomId = request.urlObject.searchParams.get("id") || request.session.roomId;
   if (!roomId) return respond.serveError(request, response, {
     statusCode: 400,
@@ -231,7 +233,6 @@ function servePoll(request, response) {
   
   // If any changes are queued, deliver and drop them now.
   if (request.session.changes.length) {
-    console.log("*** Sending changes immediately ***");
     const changes = [...request.session.changes];
     store.updateEntity("session", request.session.id, {
       changes: [],
@@ -239,10 +240,22 @@ function servePoll(request, response) {
     return respond.serveJson(request, response, changes);
   }
   
-  console.log("*** Waiting for changes ***");
   if (!(store.updateEntity("session", request.session.id, {
     pendingPoll: [request, response],
   }))) return respond.serveError(request, response, 500);
+  
+  const fail = () => {
+    store.updateEntity("session", request.session.id, {
+      pendingPoll: null,
+    });
+    respond.serveError(request, response, 598);
+  };
+  response.on("error", (error) => fail());
+  request.on("error", (error) => fail());
+  response.on("abort", (error) => fail());
+  request.on("abort", (error) => fail());
+  response.on("timeout", (error) => fail()); // this is the one that i've seen happen
+  request.on("timeout", (error) => fail());
 }
 
 /* REST dispatch.
@@ -334,5 +347,6 @@ server.listen(serverPort, serverInterface, (error) => {
 });
 
 setInterval(() => {
-  userService.dropExpiredSessions();
+  //TODO expired sessions, orphaned rooms
+  //userService.dropExpiredSessions();
 }, 1000 * 60);

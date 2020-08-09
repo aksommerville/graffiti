@@ -16,6 +16,7 @@ function cannedErrorMessage(statusCode) {
     case 403: return "Forbidden";
     case 404: return "Not Found";
     case 405: return "Method Not Allowed";
+    case 598: return "Timeout";
     case 599: return "TODO";
   }
   switch (Math.floor(statusCode / 100)) {

@@ -16,7 +16,6 @@ function fetchBackgroundImage(width, height) {
       if (!imageUrl) {
         return reject("Picsum response had no redirect URL");
       }
-      room.backgroundImageUrl = imageUrl;
       resolve(imageUrl);
     });
     request.on("error", (error) => {
@@ -27,11 +26,23 @@ function fetchBackgroundImage(width, height) {
   });
 }
 
+/* Fetch an image URL and store it in the given entity when it arrives.
+ ***************************************************/
+ 
+function acquireBackgroundImageForEntity(roomId) {
+  fetchBackgroundImage(800,600).then((url) => {
+    store.updateEntity("room", roomId, {
+      backgroundImageUrl: url,
+    });
+  });
+}
+
 /* Create room.
  *************************************************/
  
 function createRoom(userId) {
   const room = store.addEntity("room", {
+    ...storeRoom.schema.newEntity(null),
     ownerUserId: userId,
   });
   return room;
@@ -60,22 +71,31 @@ function userMayEditRoom(userId, room) {
 /* Join and leave.
  *****************************************************/
  
-//TODO i guess we do want to keep users in the room entity, to cause it to update on anyone's join/leave
- 
 function joinRoom(sessionId, roomId) {
   const session = store.getEntity("session", sessionId);
-  const room = store.getEntity("room", roomId);
+  let room = store.getEntity("room", roomId);
   if (!session || !room) return null;
   if (session.roomId) return null;
-  return store.updateEntity("session", sessionId, {
+  if (!(room=store.updateEntity("room", roomId, {
+    userIds: [...room.userIds, session.userId],
+  }))) return null;
+  if (!store.updateEntity("session", sessionId, {
     roomId: roomId,
-  });
+  })) return null;
+  return room;
 }
 
 function leaveRoom(sessionId, roomId) {
   const session = store.getEntity("session", sessionId);
   if (!session) return null;
   if (session.roomId !== roomId) return null;
+  
+  const room = store.getEntity("room", roomId);
+  if (!room) return null;
+  store.updateEntity("room", roomId, {
+    userIds: room.userIds.filter(id => id !== session.userId),
+  });
+  
   return store.updateEntity("session", sessionId, {
     roomId: null,
   });
@@ -88,6 +108,7 @@ module.exports = {
   fetchBackgroundImage,
   createRoom, // (userId) => room
   updateRoomFromJsonText, // (roomId, text, userId) => room
+  acquireBackgroundImageForEntity, // (roomId)
   
   // Joining and leaving take care of the session and all.
   joinRoom, // (sessionId, roomId) => room

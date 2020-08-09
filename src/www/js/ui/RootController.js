@@ -52,6 +52,7 @@ export class RootController {
       case "play": this.displayPlayView(main); break;
       case "conclude": this.displayConcludeView(main); break;
       case "cancel": this.displayCancelView(main); break;
+      default: console.error(`Unexpected room state`, this.roomService.room);
     }
   }
   
