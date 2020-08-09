@@ -1,90 +1,22 @@
-const fs = require("fs");
 const http = require("http");
 const https = require("https");
-const { guessMimeType } = require("./mime.js");
 const userService = require("./userService.js");
 const roomService = require("./roomService.js");
+const store = require("./store.js");
+const respond = require("./respond.js");
 
 const serverInterface = process.env["INTF"] || "localhost";
 const serverPort = +(process.env["PORT"] || "8080");
 const htdocsDir = process.env["HTDOCS"];
 
-// Call after response.end()
-function logTransaction(request, response) {
-  console.log(`${new Date().toISOString()} ${response.statusCode} ${request.method} ${request.url}`);
-}
-
-function cannedErrorMessage(statusCode) {
-  switch (statusCode) {
-    case 401: return "Unauthorized";
-    case 403: return "Forbidden";
-    case 404: return "Not Found";
-    case 405: return "Method Not Allowed";
-    case 599: return "TODO";
-  }
-  switch (Math.floor(statusCode / 100)) {
-    case 200: return "OK";
-    case 300: return "Redirect";
-    case 400: return "Client Error";
-    case 500: return "Internal Server Error";
-  }
-  return "";
-}
-
-function serveError(request, response, error) {
-  if (typeof(error) === "number") error = { statusCode: error };
-  else if (!error) error = {};
-  response.statusCode = error.statusCode || 500;
-  response.statusMessage = error.statusMessage || cannedErrorMessage(response.statusCode);
-  response.end();
-  logTransaction(request, response);
-}
-
-function serveVoid(request, response) {
-  response.statusCode = 200;
-  response.statusMessage = "OK";
-  response.end();
-  logTransaction(request, response);
-}
-
-function serveText(request, response, text) {
-  response.statusCode = 200;
-  response.statusMessage = "OK";
-  response.end(text);
-  logTransaction(request, response);
-}
-
-function serveJson(request, response, object) {
-  const json = JSON.stringify(object);
-  response.statusCode = 200;
-  response.statusMessage = "OK";
-  response.end(json);
-  logTransaction(request, response);
-}
-
-function serveStaticFile(request, response, root) {
-  if (request.method !== "GET") {
-    return serveError(request, response, 405);
-  }
-  fs.realpath(`${root}/${request.url}`, (error, path) => {
-    if (error || !path.startsWith(root)) return serveError(request, response, {
-      ...error,
-      statusCode: 404,
-    });
-    fs.readFile(path, (error, data) => {
-      if (error) return serveError(request, response, {
-        ...error,
-        statusCode: 404,
-      });
-      
-      response.setHeader("Content-Type", guessMimeType(path, data));
-      response.statusCode = 200;
-      response.status = "OK";
-      response.end(data);
-      logTransaction(request, response);
-    });
-  });
-}
+const storeRoom = require("./storeRoom.js");
+const storeUser = require("./storeUser.js");
+const storeSession = require("./storeSession.js");
+store.init([
+  storeRoom,
+  storeUser,
+  storeSession,
+]);
 
 /* Remote-control diagnostics.
  ********************************************************************/
@@ -92,176 +24,225 @@ function serveStaticFile(request, response, root) {
 function serveSelfTest(request, response) {
 
   console.log("**** PERFORMING SELF TEST PER REQUEST ****");
+  
+  const storeContent = store.examineFullContent();
 
-  const { users, sessions } = userService.getAll();
   console.log("All users (permanent list):");
-  for (const user of users) {
+  for (const user of storeContent.user) {
     console.log(`  ${user.id} '${user.name}'`);
   }
   console.log("Currently logged in:");
-  for (const session of sessions) {
+  for (const session of storeContent.session) {
     console.log(`  ${session.id} '${session.name}' ${session.expire}`);
   }
   
-  const rooms = roomService.getAll();
   console.log("Rooms:");
-  for (const room of rooms) {
+  for (const room of storeContent.room) {
     console.log(`  ${JSON.stringify(room)}`);
   }
   
   console.log("**** END OF SELF TEST ****");
 
   // Don't tell the user that this service exists.
-  serveError(request, response, 404);
+  respond.serveError(request, response, 404);
 }
 
 /* /api/player
  *******************************************************************/
  
-function validateUserName(name) {
-  if (!name) return false;
-  return !!name.match(/^[0-9a-zA-Z_\-.]{1,12}$/);
-}
-
-function validateUserId(id) {
-  if (!id) return false;
-  // We can change the rules, but please do not allow '$' -- we use that to distinguish temporary ones
-  return !!id.match(/^[0-9a-zA-Z_\-.]{1,12}$/);
-}
-
-function validateNewPassword(password) {
-  if (!password) return false;
-  if (password.length < 8) return false;
-  return true;
-}
- 
 function serveLogin(request, response) {
-  const id = request.urlObject.searchParams.get("id");
+  const name = request.urlObject.searchParams.get("name");
   const password = request.body;
-  const tokenAndName = userService.login(id, password);
-  if (!tokenAndName) return serveError(request, response, 403);
-  return serveJson(request, response, tokenAndName);
+  if (!name || !password) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "name and password required",
+  });
+  const session = userService.login(name, password);
+  if (!session) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "login failed",
+  });
+  respond.serveJson(request, response, {
+    accessToken: session.id,
+    userId: session.userId,
+  });
 }
 
 function serveNewPlayer(request, response) {
   const name = request.urlObject.searchParams.get("name");
-  if (!validateUserName(name)) return serveError(request, response, {
+  const password = request.body;
+  const session = userService.createAccount(name, password);
+  if (!session) return respond.serveError(request, response, {
     statusCode: 400,
-    statusMessage: "Invalid user name.",
+    statusMessage: "Failed to create new user",
   });
-  
-  // (id) is optional. If present, we create a new persistent user record.
-  const id = request.urlObject.searchParams.get("id");
-  if (id) {
-    if (!validateUserId(id)) return serveError(request, response, {
-      statusCode: 400,
-      statusMessage: "Invalid user id.",
-    });
-    const password = request.body;
-    if (!validateNewPassword(password)) return serveError(request, response, {
-      statusCode: 400,
-      statusMessage: "Invalid password.",
-    });
-    if (!userService.createUser(id, password, name)) return serveError(request, response, {
-      statusCode: 400,
-      statusMessage: "User id already taken.",
-    });
-    return serveLogin(request, response);
-  }
-  
-  // Anonymous login...
-  const accessToken = userService.loginWithoutCredentials(name);
-  if (!accessToken) return serveError(request, response, 500);
-  return serveJson(request, response, { accessToken, name });
+  respond.serveJson(request, response, {
+    accessToken: session.id,
+    userId: session.userId,
+  });
 }
 
 function serveDeletePlayer(request, response) {
-  userService.deleteUser(request.user.id);
-  return serveVoid(request, response);
+  const sessionId = request.session.id;
+  const userId = request.session.userId;
+  store.removeEntity("session", sessionId);
+  store.removeEntity("user", userId); // XXX If we're to scale this up, we must not delete user ids (must "retire" them or something)
+  respond.serveVoid(request, response);
 }
 
 function serveLogout(request, response) {
-  userService.logout(request.user.id);
-  return serveVoid(request, response);
+  const sessionId = request.session.id;
+  store.removeEntity("session", sessionId);
+  respond.serveVoid(request, response);
+}
+
+function serveUpdatePlayer(request, response) {
+  const userId = request.session.userId;
+  const name = request.urlObject.searchParams.get("name");
+  let user;
+  if (name) {
+    user = store.updateEntity("user", userId, {
+      name,
+    });
+  } else {
+    user = store.getEntity("user", userId);
+  }
+  if (!user) return respond.serveError(request, response, 500);
+  respond.serveJson(request, response, {
+    id: user.id,
+    name: user.name,
+  });
+}
+
+function servePasswordChange(request, response) {
+  let oldPassword, newPassword;
+  try {
+    const body = JSON.parse(request.body);
+    oldPassword = body["old"] || "";
+    newPassword = body["new"] || "";
+    const user = storeUser.changePassword(userId, oldPassword, newPassword);
+    if (!user) throw null;
+  } catch (e) {
+    return respond.serveError(request, response, {
+      statusCode: 400,
+      statusMessage: "Failed to change password",
+    });
+  }
+  respond.serveVoid(request, response);
 }
 
 /* /api/room
  ****************************************************************/
  
 function serveNewRoom(request, response) {
-  const room = roomService.createRoom(request.user.id);
-  return serveJson(request, response, room);
+  const userId = request.session.userId;
+  const sessionId = request.session.id;
+  if (request.session.roomId) {
+    return respond.serveError(request, response, {
+      statusCode: 400,
+      statusMessage: "Can't create a room while joined to another",
+    });
+  }
+  const room = roomService.createRoom(userId);
+  if (!room) return respond.serveError(request, response, 500);
+  const session = store.updateEntity("session", sessionId, {
+    roomId: room.id,
+  });
+  if (!session) return respond.serveError(request, response, 500);
+  return respond.serveJson(request, response, room);
 }
  
 function serveGetRoom(request, response) {
-  const id = request.urlObject.searchParams.get("id");
-  if (!id) return serveError(request, response, {
+  const roomId = request.urlObject.searchParams.get("id") || request.session.roomId;
+  if (!roomId) return respond.serveError(request, response, {
     statusCode: 400,
-    statusMessage: "'id' required",
+    statusMessage: "id required",
   });
-  const room = roomService.getRoom(id);
-  if (!roomService.roomIsVisibleToUser(room, request.user.id)) {
-    return serveError(request, response, 404);
-  }
-  return serveJson(request, response, room);
+  const room = store.getEntity("room", roomId);
+  if (!room) return respond.serveError(request, response, 404);
+  respond.serveJson(request, response, room);
 }
  
 function serveUpdateRoom(request, response) {
-  const id = request.urlObject.searchParams.get("id");
-  if (!id) return serveError(request, response, {
+  const roomId = request.urlObject.searchParams.get("id") || request.session.roomId;
+  if (!roomId) return respond.serveError(request, response, {
     statusCode: 400,
-    statusMessage: "'id' required",
+    statusMessage: "id required",
   });
-  const room = roomService.getRoom(id);
-  if (!room) return serveError(request, response, 404);
-  if (!roomService.roomIsMutableToUser(room, request.user.id)) {
-    return serveError(request, response, 403);
-  }
-  try {
-    const incomingRoom = JSON.parse(request.body);
-    const modified = roomService.modifyRoom(room, incomingRoom);
-    return serveJson(request, response, modified);
-  } catch (e) {
-    return serveError(request, response, {
-      statusCode: 400,
-      statusMessage: "Invalid room changes.",
-    });
-  }
+  const room = roomService.updateRoomFromJsonText(roomId, request.body, userId);
+  if (!room) return respond.serveError(request, response, {
+    statusCode: 401,
+    statusMessage: "Failed to update room",
+  });
+  respond.serveJson(request, response, room);
 }
  
 function serveDeleteRoom(request, response) {
-  const id = request.urlObject.searchParams.get("id");
-  if (!id) return serveError(request, response, {
+  const userId = request.session.userId;
+  const roomId = request.urlObject.searchParams.get("id") || request.session.roomId;
+  if (!roomId) return respond.serveError(request, response, {
     statusCode: 400,
-    statusMessage: "'id' required",
+    statusMessage: "id required",
   });
-  const room = roomService.getRoom(id);
-  if (!roomService.roomIsMutableToUser(room, request.user.id)) {
-    return serveError(request, response, 403);
-  }
-  roomService.deleteRoom(room);
-  return serveVoid(request, response);
+  const room = store.getEntity("room", roomId);
+  if (!room) return respond.serveError(request, response, 404);
+  if (!roomService.userMayEditRoom(userId, room)) return respond.serveError(request, response, {
+    statusCode: 401,
+    statusMessage: "Access denied",
+  });
+  store.removeEntity("room", roomId);
+  userService.unjoinAllForRoomId(roomId);
+  respond.serveVoid(request, response);
 }
  
 function serveJoinRoom(request, response) {
-  const id = request.urlObject.searchParams.get("id");
-  if (!id) return serveError(request, response, {
+  const sessionId = request.session.id;
+  const roomId = request.urlObject.searchParams.get("id");
+  if (!roomId) return respond.serveError(request, response, {
     statusCode: 400,
-    statusMessage: "'id' required",
+    statusMessage: "id required",
   });
-  const room = roomService.getRoom(id);
-  if (!roomService.join(room, request.user.id)) {
-    return serveError(request, response, 403);
-  }
-  return serveJson(request, response, room);
+  if (request.session.roomId) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "Can't join two rooms at once",
+  });
+  const room = roomService.joinRoom(sessionId, roomId);
+  if (!room) return respond.serveError(request, response, 404);
+  respond.serveJson(request, response, room);
 }
  
 function serveLeaveRoom(request, response) {
-  const room = roomService.getRoomForUserId(request.user.id);
-  if (room) {
-    roomService.leave(room, request.user.id);
+  const sessionId = request.session.id;
+  const roomId = request.session.roomId;
+  if (!roomId) return respond.serveVoid(request, response);
+  roomService.leaveRoom(sessionId, roomId);
+  respond.serveVoid(request, response, room);
+}
+
+/* Poll service.
+ **************************************************************/
+ 
+function servePoll(request, response) {
+
+  if (request.session.pendingPoll) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "Already polling",
+  });
+  
+  // If any changes are queued, deliver and drop them now.
+  if (request.session.changes.length) {
+    console.log("*** Sending changes immediately ***");
+    const changes = [...request.session.changes];
+    store.updateEntity("session", request.session.id, {
+      changes: [],
+    });
+    return respond.serveJson(request, response, changes);
   }
-  return serveVoid(request, response);
+  
+  console.log("*** Waiting for changes ***");
+  if (!(store.updateEntity("session", request.session.id, {
+    pendingPoll: [request, response],
+  }))) return respond.serveError(request, response, 500);
 }
 
 /* REST dispatch.
@@ -276,31 +257,34 @@ function serveApi(request, response) {
    */
   switch (endpointName) {
   
-    case "GET /api/time": return serveText(request, response, new Date().toISOString());
+    case "GET /api/time": return respond.serveText(request, response, new Date().toISOString());
+    case "GET /api/selftest": return serveSelfTest(request, response);
     case "POST /api/player/login": return serveLogin(request, response);
     case "POST /api/player/new": return serveNewPlayer(request, response);
-    case "POST /api/selftest": return serveSelfTest(request, response);
   
   }
   
   /* Authenticated calls.
    */
-  const user = userService.authenticateRequest(request);
-  if (!user) return serveError(request, response, 401);
-  request.user = user;
+  const session = userService.authenticateRequest(request);
+  if (!session) return respond.serveError(request, response, 401);
+  request.session = session;
   switch (endpointName) {
   
     case "DELETE /api/player": return serveDeletePlayer(request, response);
     case "POST /api/player/logout": return serveLogout(request, response);
+    case "POST /api/player/update": return serveUpdatePlayer(request, response);
+    case "POST /api/player/password": return servePasswordChange(request, response);
     case "POST /api/room/new": return serveNewRoom(request, response);
     case "GET /api/room": return serveGetRoom(request, response);
     case "DELETE /api/room": return serveDeleteRoom(request, response);
     case "PUT /api/room": return serveUpdateRoom(request, response);
     case "POST /api/room/join": return serveJoinRoom(request, response);
     case "POST /api/room/leave": return serveLeaveRoom(request, response);
+    case "GET /api/poll": return servePoll(request, response);
   
   }
-  serveError(request, response, 404);
+  respond.serveError(request, response, 404);
 }
 
 /* Service dispatch.
@@ -316,14 +300,14 @@ function serve(request, response) {
     }
     
     if (htdocsDir) {
-      return serveStaticFile(request, response, htdocsDir);
+      return respond.serveStaticFile(request, response, htdocsDir);
     }
     
-    serveError(request, response, 404);
+    respond.serveError(request, response, 404);
     
   } catch (e) {
     console.error(e);
-    serveError(request, response, e);
+    respond.serveError(request, response, e);
   }
 }
 

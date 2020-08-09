@@ -31,3 +31,9 @@ else
   serve:$(HTDOCS_MID);HTDOCS=$(shell realpath mid/www) node src/server/main.js
 endif
 
+#TODO Nicer test runner.
+test:; \
+  for f in $$(find src/test/server -name '*.js') ; do \
+    echo "$$f..." ; \
+    node "$$f" ; \
+  done

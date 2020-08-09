@@ -26,42 +26,56 @@ GET /api/time
 => Current time, ISO 8601
 Unauthenticated
 
-POST /api/selftest
+GET /api/selftest
 Unauthenticated
 Perform self-test and dump info to the server's log -- no results sent to client.
 
 -------------------------------------------------------------
-POST /api/player/login?id
+POST /api/player/login?name
 Unauthenticated
 <= password
 => {
   accessToken: string
-  name: string
+  userId: string
 }
 
-POST /api/player/new?name[&id]
+POST /api/player/new?name
 Unauthenticated
 <= password
 => {
   accessToken: string
-  name: string
+  userId: string
 }
+Omit password for one-time login.
 
 DELETE /api/player
 
 POST /api/player/logout
 
+POST /api/player/update?name
+=> {
+  id: string
+  name: string
+}
+
+POST /api/player/password
+<= {
+  old: string
+  new: string
+}
+
 -------------------------------------------------------------
 POST /api/room/new
 => Room
-Initially empty, you must join explicitly.
+You are the owner of the new room, and you are joined to it automatically.
 
-GET /api/room?id
+GET /api/room?[id]
 => Room
+Omit id to get the joined room.
 
-DELETE /api/room?id
+DELETE /api/room?[id]
 
-PUT /api/room?id
+PUT /api/room?[id]
 <= Room
 => Room
 
@@ -72,23 +86,23 @@ POST /api/room/leave
 
 Player may join no more than one room at a time.
 
+-------------------------------------------------------------
+GET /api/poll
+=> {
+  changes: [{
+    type: "user" | "room" // store entity types; may add others in the future
+    entity: {...} // always has an "id"
+  }]
+}
+
+The same entity will not be listed twice.
+This call will stall until at least one change is present.
+If it times out, sleep a little and call again.
+Changes that occur during your sleep will still be reported, no worries.
+This is an alternative to websocket.
+
 =============================================================
 Types
 =============================================================
 
-Room {
-  id: string
-  ownerId: string
-  players: Player[]
-  state: "gather" | "play" | "conclude" | "cancel"
-  startTime: ms
-  endTime: ms
-  permitObservation: boolean // can players see this room's content without joining?
-  openToPublic: boolean // can everybody join? (for now this is mandatory)
-  permitMutation: boolean // if true, anyone who can read it can also write (otherwise only the owner)
-}
-
-Player {
-  id: string // canonical user id
-  name: string // for display
-}
+//TODO declare types here after reorganizing services

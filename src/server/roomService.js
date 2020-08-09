@@ -1,223 +1,97 @@
-const userService = require("./userService.js");
+const store = require("./store.js");
+const storeRoom = require("./storeRoom.js");
+const https = require("https");
 
-/* Globals
- ***************************************************/
-
-/*
-Room {
-  id: string
-  players: Player[]
-  state: "gather" | "play" | "conclude" | "cancel"
-  startTime: ms
-  endTime: ms
-  permitObservation: boolean // can players see this room's content without joining?
-  openToPublic: boolean // can everybody join? (for now this is mandatory)
-  ownerId: string // user id
-  permitMutation: boolean
+/* Fetch a new background image.
+ *********************************************************/
+ 
+function fetchBackgroundImage(width, height) {
+  return new Promise((resolve, reject) => {
+    const url = `https://picsum.photos/${width}/${height}`;
+    const request = https.get(url, (response) => {
+      if ((response.statusCode < 300) || (response.statusCode > 399)) {
+        return reject(response);
+      }
+      const imageUrl = response.headers["location"];
+      if (!imageUrl) {
+        return reject("Picsum response had no redirect URL");
+      }
+      room.backgroundImageUrl = imageUrl;
+      resolve(imageUrl);
+    });
+    request.on("error", (error) => {
+      console.log(`HTTP ERROR!`, error);
+      reject(error);
+    });
+    request.end();
+  });
 }
- */
-const rooms = [];
 
 /* Create room.
- ***************************************************/
+ *************************************************/
  
-function choose(options) {
-  return options[Math.floor(Math.random() * options.length)];
-}
- 
-function generateRandomRoomId() {
-  const adjectives = [
-    "Awesomest", "MostFabulous", "MostMagnificent", "Funnest",
-    "Best", "Wackiest", "Silliest",
-  ];
-  const nouns = [
-    "Room", "Game", "Team", "Crew", "Bunch",
-  ];
-  const qualifiers = [
-    "Ever", "InTown", "OnEarth", "Anywhere", "IKnow",
-  ];
-  let id = `The${choose(adjectives)}${choose(nouns)}${choose(qualifiers)}`;
-  let seq = '';
-  while (rooms.find(r => r.id === `${id}${seq}`)) seq++; // (seq++) believe it or not :)
-  return `${id}${seq}`;
-}
- 
-function createRoom(ownerId) {
-  const id = generateRandomRoomId();
-  const room = {
-    id,
-    ownerId,
-    players: [],
-    state: "gather",
-    startTime: null,
-    endTime: null,
-    permitObservation: true,
-    openToPublic: true,
-    permitMutation: false,
-  };
-  rooms.push(room);
+function createRoom(userId) {
+  const room = store.addEntity("room", {
+    ownerUserId: userId,
+  });
   return room;
 }
 
-/* Get room by id.
- **************************************************/
- 
-function getRoom(id) {
-  return rooms.find(r => r.id === id);
-}
-
-/* Test access.
+/* Parse an update request, confirm authz, and commit it.
  ***************************************************/
  
-function roomIsVisibleToUser(room, userId) {
-  if (!room) return false;
-  if (room.permitObservation) return true;
-  if (room.ownerId === userId) return true;
-  if (room.players.find(p => p.id === userId)) return true;
-  return false;
+function updateRoomFromJsonText(roomId, text, userId) {
+  const original = store.getEntity("room", roomId);
+  if (!original) return null;
+  if (!userMayEditRoom(userId, original)) return null;
+  const incoming = JSON.parse(text);
+  return store.updateEntity("room", roomId, incoming);
 }
 
-function roomIsMutableToUser(room, userId) {
-  if (!room) return false;
-  if (room.ownerId === userId) return true;
-  if (!room.permitMutation) return false;
-  if (roomIsVisibleToUser(room, userId)) return true;
-  return false;
-}
-
-function roomIsJoinableToUser(room, userId) {
-  if (!room) return false;
-  if (room.state !== "gather") return false;
-  if (room.ownerId === userId) return true;
-  if (room.openToPublic) return true;
-  return false;
-}
-
-/* Modify room.
+/* Access control.
  **************************************************/
  
-function modifyRoom(original, incoming) {
-  const fail = () => { throw new Error("invalid room modification"); };
-  
-  if (!original || !incoming) fail();
-  
-  if (incoming.hasOwnProperty("id")) {
-    // Not allowed to modify (id)
-    if (original.id !== incoming.id) fail();
-  }
-  
-  if (incoming.hasOwnProperty("ownerId")) {
-    // Not allowed to modify (ownerId)
-    if (original.ownerId !== incoming.ownerId) fail();
-  }
-  
-  if (incoming.hasOwnProperty("players")) {
-    // Not allowed to modify (players)
-    if (original.players.length !== incoming.players.length) fail();
-    for (const player of incoming.players) {
-      const oplayer = original.players.find(p => p.id === player.id);
-      if (!oplayer || (oplayer.name !== player.name)) fail();
-    }
-  }
-  
-  if (incoming.hasOwnProperty("state") && (incoming.state !== original.state)) {
-    switch (incoming.state) {
-      case "gather": if (original.state !== "conclude") fail(); break;
-      case "play": if (original.state !== "gather") fail(); break;
-      case "conclude": break;
-      case "cancel": break;
-      default: fail();
-    }
-    original.state = incoming.state;
-  }
-  
-  if (incoming.hasOwnProperty("startTime") && (incoming.startTime !== original.startTime)) {
-    if (typeof(incoming.startTime) !== "number") fail();
-    original.startTime = incoming.startTime;
-  }
-  
-  if (incoming.hasOwnProperty("endTime") && (incoming.endTime !== original.endTime)) {
-    if (typeof(incoming.endTime) !== "number") fail();
-    original.endTime = incoming.endTime;
-  }
-  
-  if (incoming.hasOwnProperty("permitObservation")) {
-    if (typeof(incoming.permitObservation) !== "boolean") fail();
-    original.permitObservation = incoming.permitObservation;
-  }
-  
-  if (incoming.hasOwnProperty("openToPublic")) {
-    if (typeof(incoming.openToPublic) !== "boolean") fail();
-    original.openToPublic = incoming.openToPublic;
-  }
-  
-  if (incoming.hasOwnProperty("permitMutation")) {
-    if (typeof(incoming.permitMutation) !== "boolean") fail();
-    original.permitMutation = incoming.permitMutation;
-  }
-  
-  return original;
+function userMayEditRoom(userId, room) {
+  if (room.ownerUserId === userId) return true;
+  if (room.permitAnyEdit) return true;
+  return false;
 }
 
-/* Delete room.
- ****************************************************/
+/* Join and leave.
+ *****************************************************/
  
-function deleteRoom(room) {
-  const index = rooms.indexOf(room);
-  if (index < 0) return;
-  rooms.splice(index, 1);
-}
-
-/* Join user to room.
- ******************************************************/
+//TODO i guess we do want to keep users in the room entity, to cause it to update on anyone's join/leave
  
-function join(room, userId) {
-  if (!room) return false;
-  if (!userId) return false;
-  if (rooms.indexOf(room) < 0) return false; // not a real room
-  if (room.players.find(p => p.id === userId)) return true; // already joined
-  if (!roomIsJoinableToUser(room, userId)) return false;
-  const user = userService.getLoggedInUserDetails(userId);
-  if (!user) return false;
-  room.players.push({
-    id: user.id,
-    name: user.name,
+function joinRoom(sessionId, roomId) {
+  const session = store.getEntity("session", sessionId);
+  const room = store.getEntity("room", roomId);
+  if (!session || !room) return null;
+  if (session.roomId) return null;
+  return store.updateEntity("session", sessionId, {
+    roomId: roomId,
   });
-  return true;
 }
 
-/* Remove user from room.
- **************************************************/
- 
-function leave(room, userId) {
-  if (!room || !userId) return;
-  const index = room.players.findIndex(p => p.id === userId);
-  if (index >= 0) {
-    room.players.splice(index, 1);
-  }
-}
-
-/* Get all rooms.
- ***************************************************/
- 
-function getAll() {
-  return rooms.map(room => ({
-    ...room,
-    players: [...room.players],
-  }));
+function leaveRoom(sessionId, roomId) {
+  const session = store.getEntity("session", sessionId);
+  if (!session) return null;
+  if (session.roomId !== roomId) return null;
+  return store.updateEntity("session", sessionId, {
+    roomId: null,
+  });
 }
 
 /* TOC
  *************************************************/
  
 module.exports = {
-  createRoom,
-  getRoom,
-  roomIsVisibleToUser,
-  roomIsMutableToUser,
-  modifyRoom,
-  deleteRoom,
-  join,
-  leave,
-  getAll,
+  fetchBackgroundImage,
+  createRoom, // (userId) => room
+  updateRoomFromJsonText, // (roomId, text, userId) => room
+  
+  // Joining and leaving take care of the session and all.
+  joinRoom, // (sessionId, roomId) => room
+  leaveRoom, // (sessionId, roomId)
+  
+  userMayEditRoom,
 };
