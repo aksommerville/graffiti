@@ -30,7 +30,7 @@ function fetchBackgroundImage(width, height) {
  ***************************************************/
  
 function acquireBackgroundImageForEntity(roomId) {
-  fetchBackgroundImage(800,600).then((url) => {
+  fetchBackgroundImage(800, 600).then((url) => {
     store.updateEntity("room", roomId, {
       backgroundImageUrl: url,
     });

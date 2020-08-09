@@ -10,6 +10,7 @@
  *   permitAnyLogin // must be true, since we don't have fine-grained authz yet (TODO)
  *   permitAnyEdit // if false, only the owner can edit
  *   improvements: { userId: text }
+ *   electionId // set in "conclude" state, when an election is running
  * }
  */
  
@@ -31,6 +32,7 @@ function newEntity(id) {
     permitAnyLogin: true,
     permitAnyEdit: false,
     improvements: {},
+    electionId: null,
   };
 }
 
@@ -63,6 +65,7 @@ function applyChanges(original, incoming) {
   scalar("showInPublicLists");
   scalar("permitAnyLogin");
   scalar("permitAnyEdit");
+  scalar("electionId");
   
   scalar("state", (state) => {
     switch (state) {

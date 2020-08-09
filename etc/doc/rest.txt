@@ -99,6 +99,14 @@ POST /api/image
 <= text form of image changes
 
 -------------------------------------------------------------
+POST /api/vote?userId
+<= Election
+Cast or overwrite your vote, valid only when in a room in "conclude" state.
+
+GET /api/vote?electionId
+<= Election
+
+-------------------------------------------------------------
 GET /api/poll
 => {
   changes: [{

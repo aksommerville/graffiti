@@ -21,6 +21,7 @@ export class JudgeController {
     
     this.buildUi();
     
+    this.element.addEventListener("click", (event) => this.onClick(event));
     this.onRoomChanged(this.roomService.room);
     this.roomListener = this.roomService.listen((room) => this.onRoomChanged(room));
   }
@@ -89,11 +90,45 @@ export class JudgeController {
     }
   }
   
+  findImageForEvent(event) {
+    if (!event) return null;
+    let element = event.target;
+    while (element) {
+      if (element.classList.contains("ImprovedImage")) {
+        return element._graffiti_controller;
+      }
+      element = element.parentNode;
+    }
+    return null;
+  }
+  
+  /* Prize.
+   *****************************************************/
+   
+  awardFirstPrizeUi(image) {
+    for (const element of this.element.querySelectorAll(".first-prize")) element.remove();
+    const element = this.dom.spawn(image.element, "IMG", ["first-prize"], {
+      src: "/img/first-prize.png",
+    });
+  }
+  
   /* Events
    ****************************************************/
    
   onRoomChanged(room) {
     this.replaceChangedImages(room ? room.improvements : {});
+  }
+  
+  onClick(event) {
+    const image = this.findImageForEvent(event);
+    if (!image) return;
+    console.log(`FAVORITE USER: ${image.userId}`);
+    if (image.userId === this.userService.user.userId) {
+      console.log(`cant vote for yourself`);
+    } else {
+      console.log(`...ok cast vote and update ui`);
+      this.awardFirstPrizeUi(image);
+    }
   }
   
 }

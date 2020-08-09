@@ -52,8 +52,17 @@ footer {
   border-radius: 1em;
   box-shadow: #000000 0 0 1em;
   margin: 0.5em;
+  position: relative;
 }
 
 .ImprovedImage > canvas {
   border-radius: 1em;
+}
+
+.ImprovedImage .first-prize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  transform: translate(20%, 20%);
+  z-index: 40;
 }

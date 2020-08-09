@@ -1,0 +1,26 @@
+[ ] Select winner
+[ ] Prompt
+[ ] Color palette
+[ ] Line width
+[ ] Wrap caption
+[ ] Valediction and restart
+[ ] Log out
+[ ] Leave room
+[ ] Save improved image
+[ ] JudgeController: Image container aspect doesn't always match canvas
+[ ] One-shot URL to enter room
+[ ] Cronny tasks in server. Expire sessions, drop orphans, etc.
+[ ] Test framework for frontend
+[ ] Makefile: Package for deployment
+[ ] Provision EC2
+[ ] Test with remote users
+[ ] Test on various platforms:
+  [ ] Android Chrome
+  [ ] NW Firefox
+  [ ] NW Chrome
+  xxx NW IE will not work
+  [ ] Linux Firefox
+  [ ] Linux Chrome
+  [ ] MacOS Firefox
+  [ ] MacOS Chrome
+  [ ] MacOS Safari

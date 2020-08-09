@@ -2,6 +2,7 @@ const http = require("http");
 const https = require("https");
 const userService = require("./userService.js");
 const roomService = require("./roomService.js");
+const voteService = require("./voteService.js");
 const store = require("./store.js");
 const respond = require("./respond.js");
 
@@ -12,10 +13,12 @@ const htdocsDir = process.env["HTDOCS"];
 const storeRoom = require("./storeRoom.js");
 const storeUser = require("./storeUser.js");
 const storeSession = require("./storeSession.js");
+const storeVote = require("./storeVote.js");
 store.init([
   storeRoom,
   storeUser,
   storeSession,
+  storeVote,
 ]);
 
 /* Remote-control diagnostics.
@@ -285,6 +288,35 @@ function servePoll(request, response) {
   request.on("timeout", (error) => fail());
 }
 
+/* Voting.
+ ****************************************************************/
+
+servePostVote(request, response) {
+  const targetUserId = request.urlObject.searchParams.get("userId");
+  if (!targetUserId) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "'userId' required",
+  });
+  const voterUserId = request.session.userId;
+  const roomId = request.session.roomId;
+  if (!roomId) return respond.serveError(request, response, {
+    statusCode: 400,
+    statusMessage: "No election",
+  });
+  const election = voteService.castVote(roomId, voterUserId, targetUserId);
+  if (!election) respond.serveError(request, response, 500);
+  respond.serveJson(request, response, election);
+}
+ 
+serveGetVote(request, response) {
+  const electionId = request.urlObject.searchParams.get("electionId");
+  const election = electionId 
+    ? voteService.getElection(electionId) 
+    : voteService.getElectionForRoom(request.session.roomId);
+  if (!election) return respond.serveError(request, response, 500);
+  respond.serveJson(request, response, election);
+}
+
 /* REST dispatch.
  ******************************************************************/
 
@@ -324,6 +356,8 @@ function serveApi(request, response) {
     case "POST /api/room/leave": return serveLeaveRoom(request, response);
     case "POST /api/image": return servePostImage(request, response);
     case "GET /api/poll": return servePoll(request, response);
+    case "GET /api/vote": return serveGetVote(request, response);
+    case "POST /api/vote": return servePostVote(request, response);
   
   }
   respond.serveError(request, response, 404);
